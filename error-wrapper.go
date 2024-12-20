@@ -8,6 +8,9 @@ type errorWrapper struct {
 }
 
 func WrapError(msg string, prev error) error {
+	if prev == nil {
+		return nil
+	}
 	return &errorWrapper{
 		msg:  msg,
 		prev: prev,
