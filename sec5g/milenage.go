@@ -1,4 +1,4 @@
-package sec
+package sec5g
 
 import (
 	"bytes"
