@@ -5,10 +5,6 @@ import (
 	"sync"
 )
 
-const (
-	NUM_TRIES int = 1024
-)
-
 type idPool struct {
 	l     int64
 	u     int64
@@ -38,19 +34,6 @@ func (p *idPool) allocate() (id int64) {
 		}
 	}
 
-	/*
-		//NOTE: for now we have to use random allocator to deal with the duplication
-		//caused by multiple SMFs. There must be another network function that
-		//allocates IP range for SMF
-
-		for i := 0; i < NUM_TRIES; i++ {
-			id = rand.Int63n(p.u-p.l) + p.l
-			if _, ok := p.used[id]; !ok {
-				p.used[id] = true
-				return
-			}
-		}
-	*/
 	id = p.l - 1
 	return
 }
@@ -67,16 +50,7 @@ type IpAllocator struct {
 }
 
 func New(cidr net.IPNet, l, u int64) *IpAllocator {
-	//calculate number of mask bits
-	var bits int
-	for _, b := range cidr.Mask {
-		for ; b != 0; b /= 2 {
-			if b%2 != 0 {
-				bits++
-			}
-		}
-	}
-	maxIp := int64(1<<int64(32-bits)) - 2
+	maxIp := MaxIp(cidr)
 	if u > maxIp {
 		u = maxIp
 	}
@@ -135,4 +109,17 @@ func ipOffset(in, base net.IP) (offset int) {
 		exp *= 256
 	}
 	return
+}
+
+func MaxIp(cidr net.IPNet) int64 {
+	//calculate number of mask bits
+	var bits int
+	for _, b := range cidr.Mask {
+		for ; b != 0; b /= 2 {
+			if b%2 != 0 {
+				bits++
+			}
+		}
+	}
+	return int64(1<<int64(32-bits)) - 2
 }
