@@ -45,8 +45,25 @@ func (p *idPool) release(id int64) {
 }
 
 type IpAllocator struct {
-	cidr net.IPNet
-	pool idPool
+	baseIp net.IP
+	pool   idPool
+}
+
+func NewIpAllocator(cidr net.IPNet, ipRange int64, rangeIndex uint8) *IpAllocator {
+	maxIp := MaxIp(cidr)
+	l := int64(rangeIndex)*ipRange + 1
+	if ipRange <= 0 || l > maxIp {
+		return nil
+	}
+	u := l + ipRange - 1
+	if u > maxIp {
+		u = maxIp
+	}
+
+	return &IpAllocator{
+		baseIp: cidr.IP,
+		pool:   newIdPool(l, u),
+	}
 }
 
 func New(cidr net.IPNet, l, u int64) *IpAllocator {
@@ -61,8 +78,8 @@ func New(cidr net.IPNet, l, u int64) *IpAllocator {
 		l = 1
 	}
 	return &IpAllocator{
-		cidr: cidr,
-		pool: newIdPool(l, u),
+		baseIp: cidr.IP,
+		pool:   newIdPool(l, u),
 	}
 }
 
@@ -71,12 +88,12 @@ func (a *IpAllocator) Allocate() (ip net.IP) {
 	if id := a.pool.allocate(); id < a.pool.l {
 		return
 	} else {
-		return offsetIp(a.cidr.IP, int(id))
+		return offsetIp(a.baseIp, int(id))
 	}
 }
 
 func (a *IpAllocator) Release(ip net.IP) {
-	id := ipOffset(ip, a.cidr.IP)
+	id := ipOffset(ip, a.baseIp)
 	a.pool.release(int64(id))
 }
 
