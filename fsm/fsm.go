@@ -130,7 +130,7 @@ func NewFsm(opts Options, w Executer) *Fsm {
 }
 
 type Executer interface {
-	Submit(func())
+	Go(func()) error
 }
 
 // Send an event, return a chanel to receive an error reporting if the event is
@@ -187,8 +187,11 @@ func (fsm *Fsm) handleEvent(state *State, event *EventData, errCh chan error, sy
 	}
 	if sync {
 		fn()
-	} else {
-		fsm.w.Submit(fn) //handle the event in a worker pool
+	} else { //handle the event in a worker pool
+		if err := fsm.w.Go(fn); err != nil { //fail to send to a workerpool
+			errCh <- err
+			return
+		}
 	}
 	if nonTransit {
 		errCh <- nil
