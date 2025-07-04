@@ -68,6 +68,7 @@ func (m *FsmMetrics) getInfo() *FsmInfo {
 			ResetCount: stats.resetCnt,
 			Duration:   stats.sumDuration,
 		}
+		i++
 	}
 	return info
 }
