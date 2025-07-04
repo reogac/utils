@@ -45,7 +45,7 @@ func GetEventData[T any](e *EventData) *T {
 	return (*T)(e.evDat)
 }
 
-// clone with new event type
+// clone with new event type (for ExitEvent and EntryEvent)
 func (e *EventData) clone(evType EventType) *EventData {
 	return &EventData{
 		evType:      evType,

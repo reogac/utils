@@ -3,6 +3,7 @@ package fsm
 import (
 	"fmt"
 	"sync"
+	"time"
 	"unsafe"
 )
 
@@ -17,7 +18,7 @@ const (
 
 type State struct {
 	current StateType    //current state value
-	next    *EventData   //next event to be handle immediately
+	nextEv  *EventData   //next event to be handle immediately
 	evLock  sync.Mutex   //for locking an event handling
 	mutex   sync.RWMutex //for read/write current state value
 	info    unsafe.Pointer
@@ -53,7 +54,7 @@ func (s *State) CurrentState() StateType {
 }
 
 func (s *State) SetNextEvent(event *EventData) {
-	s.next = event
+	s.nextEv = event
 }
 
 type StateEventTuple struct {
@@ -78,6 +79,7 @@ type Fsm struct {
 	handler     CallbackFn
 	done        chan struct{}
 	w           Executer
+	metrics     FsmMetrics
 }
 
 type Options struct {
@@ -95,6 +97,7 @@ func NewFsm(opts Options, w Executer) *Fsm {
 		handler:     opts.GenericCallback,
 		done:        make(chan struct{}),
 		w:           w,
+		metrics:     newFsmMetrics(),
 	}
 
 	for s, fn := range opts.Callbacks {
@@ -152,20 +155,25 @@ func (fsm *Fsm) SyncSendEvent(state *State, event *EventData) error {
 }
 
 func (fsm *Fsm) processNextEvent(state *State) {
-	for state.next != nil {
-		next := state.next
-		state.next = nil //reset next event for the state
-		if _, ok := fsm.events[next.Type()]; ok {
-			fsm.handler(state, next)
+	for state.nextEv != nil {
+		t := time.Now()
+		fsm.metrics.onSubmitted()
+		fsm.metrics.onTriggered()
+		nextEv := state.nextEv
+		state.nextEv = nil //reset next event for the state
+		if _, ok := fsm.events[nextEv.Type()]; ok {
+			fsm.handler(state, nextEv)
 		} else { //if it is a transitional event
-			fsm.transit(state, next, nil)
+			fsm.transit(state, nextEv, nil)
 		}
+		fsm.metrics.onCompleted(nextEv.Type(), t)
 	}
 }
 
 func (fsm *Fsm) handleEvent(state *State, event *EventData, errCh chan error, sync bool) {
 	//a state only process one event at a time, so we need to lock it
 	//release the state lock after finish handling the event
+	fsm.metrics.onSubmitted()
 
 	var fn func()
 	var nonTransit bool
@@ -173,14 +181,20 @@ func (fsm *Fsm) handleEvent(state *State, event *EventData, errCh chan error, sy
 	if _, nonTransit = fsm.events[event.Type()]; nonTransit {
 		fn = func() {
 			state.evLock.Lock()
+			t := time.Now()
+			fsm.metrics.onTriggered()
 			fsm.handler(state, event)
+			fsm.metrics.onCompleted(event.Type(), t)
 			fsm.processNextEvent(state)
 			state.evLock.Unlock()
 		}
 	} else { //if it is a transitional event
 		fn = func() {
 			state.evLock.Lock()
+			t := time.Now()
+			fsm.metrics.onTriggered()
 			fsm.transit(state, event, errCh)
+			fsm.metrics.onCompleted(event.Type(), t)
 			fsm.processNextEvent(state)
 			state.evLock.Unlock() //unlock the state
 		}
@@ -217,14 +231,11 @@ func (fsm *Fsm) transit(state *State, event *EventData, errCh chan error) {
 		}
 		if current != nextState { //state will be changed
 			//exectute callback for ExitEvent of the current state
-			//log.Tracef("EXIT state %d", current)
 			curCallback(state, event.clone(ExitEvent))
 			//change to the next state
-			//log.Tracef("ENTRER state %d", nextState)
 			state.setState(nextState)
 			//execute callback for EtryEvent of the next state
 			if nextCallback != nil {
-				//log.Tracef("Call ENTRY event on state %d", nextState)
 				nextCallback(state, event.clone(EntryEvent))
 			}
 		}
@@ -233,4 +244,8 @@ func (fsm *Fsm) transit(state *State, event *EventData, errCh chan error) {
 			errCh <- fmt.Errorf("Unknown transition from state %v with event %v", current, event)
 		}
 	}
+}
+
+func (fsm *Fsm) Info() *FsmInfo {
+	return fsm.metrics.getInfo()
 }
