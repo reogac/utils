@@ -122,7 +122,8 @@ func (c *Client) goContext(ctxInfo oam.ServerContext) {
 						c.connect(url, cmd.String("headers"), cmd.String("certName"))
 						return nil
 					},
-					Writer: &w,
+					Writer:    &w,
+					ErrWriter: &w,
 				}
 
 				args := append([]string{"connect"}, ctx.Args...)
