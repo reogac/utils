@@ -1,8 +1,12 @@
 package client
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"github.com/abiosoft/ishell"
 	"github.com/reogac/utils/oam"
+	"github.com/urfave/cli/v3"
 	"os"
 )
 
@@ -89,11 +93,46 @@ func (c *Client) goContext(ctxInfo oam.ServerContext) {
 			Name: "connect",
 			Help: "Connect to a remote server",
 			Func: func(ctx *ishell.Context) {
-				if srv := c.parseServer(ctx.Args); srv != nil {
-					c.connect(srv)
+				var w bytes.Buffer
+				var connectCmd *cli.Command = &cli.Command{
+					Name:        "connect",
+					Usage:       "Connect to an OAM server",
+					Description: "Connect to an OAM server",
+					Arguments: []cli.Argument{
+						&cli.StringArg{
+							Name: "url",
+						},
+					},
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:  "headers",
+							Usage: "List of key:value headers to send to server",
+						},
+						&cli.StringFlag{
+							Name:  "certName",
+							Usage: "Subject name on the server certifice for TLS verification",
+						},
+					},
+					Action: func(ctx context.Context, cmd *cli.Command) error {
+						c := ctx.Value("client").(*Client)
+						if cmd.Args().Len() == 0 {
+							return fmt.Errorf("server url is missing")
+						}
+						c.connect(cmd.Args().Get(0), cmd.String("headers"), cmd.String("certName"))
+						return nil
+					},
+					Writer: &w,
+				}
+
+				args := append([]string{"connect"}, ctx.Args...)
+				cmdCtx := context.WithValue(context.Background(), "client", c)
+
+				if err := connectCmd.Run(cmdCtx, args); err == nil {
+					if buf := w.Bytes(); len(buf) > 0 {
+						ctx.Printf("%s\n", string(buf))
+					}
 				} else {
-					ctx.Println("Usage: connect <[http://]ip:port[/prefix]> header certName")
-					return
+					ctx.Printf("Fail to connect: %+v\n", err)
 				}
 			},
 		})

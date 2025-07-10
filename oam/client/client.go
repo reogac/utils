@@ -48,8 +48,8 @@ func (c *Client) sendHttpRequest(req *http.Request) (*http.Response, error) {
 }
 
 // connect to remote OAM server
-func (c *Client) connect(srv *ServerInfo) {
-	c.server = srv
+func (c *Client) connect(url, headers, certName string) {
+	c.initServerInfo(url, headers, certName)
 	req := &oam.ConnectionRequest{
 		Nonce: 100,
 	}
@@ -59,7 +59,7 @@ func (c *Client) connect(srv *ServerInfo) {
 	var httpReq *http.Request
 	var err error
 
-	if httpReq, err = http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s", srv.url, oam.OAM_CONN), bytes.NewBuffer(reqBytes)); err != nil {
+	if httpReq, err = http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s", c.server.url, oam.OAM_CONN), bytes.NewBuffer(reqBytes)); err != nil {
 		c.shell.Printf("Failed to create a http request: %+v\n", err)
 		return
 	}

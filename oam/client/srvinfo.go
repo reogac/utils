@@ -11,28 +11,16 @@ type ServerInfo struct {
 	cli     *httpw.Client
 }
 
-func (c *Client) parseServer(args []string) *ServerInfo {
-	if len(args) == 0 {
-		return nil
+func (c *Client) initServerInfo(url, headers, certName string) {
+	c.server = &ServerInfo{
+		url:     "http://" + url,
+		headers: parseHeaders(headers),
 	}
-	srv := &ServerInfo{
-		url: "http://" + args[0],
-	}
-	if len(args) >= 2 {
-		srv.headers = parseHeaders(args[1])
-	}
-	var certName string
-	if len(args) >= 3 {
-		certName = args[2]
-	}
-
 	if len(certName) > 0 {
-		srv.cli = httpw.NewClient(c.cert, c.caPool, certName)
+		c.server.cli = httpw.NewClient(c.cert, c.caPool, certName)
 	} else {
-		srv.cli = httpw.NewClient(nil, nil, "")
+		c.server.cli = httpw.NewClient(nil, nil, "")
 	}
-
-	return srv
 }
 
 func parseHeaders(str string) (headers map[string]string) {
