@@ -115,10 +115,11 @@ func (c *Client) goContext(ctxInfo oam.ServerContext) {
 					},
 					Action: func(ctx context.Context, cmd *cli.Command) error {
 						c := ctx.Value("client").(*Client)
-						if cmd.Args().Len() == 0 {
+						url := cmd.StringArg("url")
+						if len(url) == 0 {
 							return fmt.Errorf("server url is missing")
 						}
-						c.connect(cmd.Args().Get(0), cmd.String("headers"), cmd.String("certName"))
+						c.connect(url, cmd.String("headers"), cmd.String("certName"))
 						return nil
 					},
 					Writer: &w,
