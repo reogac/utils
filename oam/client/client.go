@@ -49,6 +49,7 @@ func (c *Client) sendHttpRequest(req *http.Request) (*http.Response, error) {
 
 // connect to remote OAM server
 func (c *Client) connect(srv *ServerInfo) {
+	c.server = srv
 	req := &oam.ConnectionRequest{
 		Nonce: 100,
 	}
@@ -82,7 +83,6 @@ func (c *Client) connect(srv *ServerInfo) {
 	}
 
 	c.shell.Printf("Server %s replied: %s\n", rsp.ServerName, rsp.Message)
-	c.server = srv
 	c.goContext(rsp.Context)
 }
 
