@@ -15,7 +15,6 @@ func init() {
 }
 
 const (
-	OAM_ROOT   string = "oam"
 	OAM_STATUS string = "status"
 	OAM_CONN   string = "connect"
 	OAM_CMD    string = "cmd"

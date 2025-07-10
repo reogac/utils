@@ -2,27 +2,31 @@ package client
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"github.com/abiosoft/ishell"
 	"github.com/reogac/utils/oam"
-	"io"
 	"net/http"
 	"strings"
 )
 
 type Client struct {
-	shell     *ishell.Shell
-	context   *Context
-	serverUrl string
+	shell   *ishell.Shell
+	context *Context
+	server  *ServerInfo
+	cert    *tls.Certificate
+	caPool  *x509.CertPool
 }
 
 // NewClient creates and initializes a new CLI client
-func NewClient() *Client {
+func NewClient(cert *tls.Certificate, caPool *x509.CertPool) *Client {
 	client := &Client{
-		shell: ishell.New(),
+		shell:  ishell.New(),
+		cert:   cert,
+		caPool: caPool,
 	}
-
 	return client
 }
 
@@ -36,21 +40,36 @@ func (c *Client) Run() {
 	c.shell.Run()
 }
 
-// connect to remote OAM server
-func (c *Client) connect(url string) {
-	if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
-		url = "http://" + url
+func (c *Client) sendHttpRequest(req *http.Request) (*http.Response, error) {
+	for k, v := range c.server.headers {
+		req.Header.Add(k, v)
 	}
+	return c.server.cli.SendRequest(req)
+}
+
+// connect to remote OAM server
+func (c *Client) connect(srv *ServerInfo) {
 	req := &oam.ConnectionRequest{
 		Nonce: 100,
 	}
 	reqBytes, _ := json.Marshal(req)
 
-	httpRsp, err := http.Post(url+fmt.Sprintf("/%s/%s", oam.OAM_ROOT, oam.OAM_CONN), "application/json", bytes.NewBuffer(reqBytes))
-	if err != nil {
-		c.shell.Printf("Failed to connect to server: %v\n", err)
+	var httpRsp *http.Response
+	var httpReq *http.Request
+	var err error
+
+	if httpReq, err = http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s", srv.url, oam.OAM_CONN), bytes.NewBuffer(reqBytes)); err != nil {
+		c.shell.Printf("Failed to create a http request: %+v\n", err)
 		return
 	}
+
+	httpRsp, err = c.sendHttpRequest(httpReq)
+
+	if err != nil {
+		c.shell.Printf("Failed to connect to server: %+v\n", err)
+		return
+	}
+
 	defer httpRsp.Body.Close()
 	var rsp oam.ConnectionResponse
 	if err := json.NewDecoder(httpRsp.Body).Decode(&rsp); err != nil {
@@ -63,8 +82,8 @@ func (c *Client) connect(url string) {
 	}
 
 	c.shell.Printf("Server %s replied: %s\n", rsp.ServerName, rsp.Message)
+	c.server = srv
 	c.goContext(rsp.Context)
-	c.serverUrl = url
 }
 
 func (c *Client) requestCmd(cmd string, ctx *ishell.Context) {
@@ -74,23 +93,24 @@ func (c *Client) requestCmd(cmd string, ctx *ishell.Context) {
 		Args:      ctx.Args,
 	}
 	reqBytes, _ := json.Marshal(req)
+	var httpReq *http.Request
+	var httpRsp *http.Response
+	var err error
+	if httpReq, err = http.NewRequest(http.MethodPost, fmt.Sprintf("%s/%s", c.server.url, oam.OAM_CMD), bytes.NewBuffer(reqBytes)); err != nil {
 
-	httpRsp, err := http.Post(fmt.Sprintf("%s/%s/%s", c.serverUrl, oam.OAM_ROOT, oam.OAM_CMD), "application/json", bytes.NewBuffer(reqBytes))
-	if err != nil {
+		ctx.Printf("Fail to build an http request: %+v\n", err)
+		return
+	}
+	if httpRsp, err = c.sendHttpRequest(httpReq); err != nil {
 		ctx.Printf("Fail to send command: %+v\n", err)
 		return
 	}
 	defer httpRsp.Body.Close()
 
-	rspBytes, err := io.ReadAll(httpRsp.Body)
-	if err != nil {
-		ctx.Printf("Failed to decode response: %+v\n", err)
-		return
-	}
-
 	var rsp oam.CmdResponse
-	if err := json.Unmarshal(rspBytes, &rsp); err != nil {
-		ctx.Printf("Failed to parse response: %+v\nresponse body: %s\n", err, string(rspBytes))
+
+	if err := json.NewDecoder(httpRsp.Body).Decode(&rsp); err != nil {
+		ctx.Printf("Failed to decode response: %+v\n", err)
 		return
 	}
 

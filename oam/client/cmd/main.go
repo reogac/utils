@@ -27,12 +27,11 @@ func main() {
 		os.Exit(0)
 	}
 
-	cli := client.NewClient()
+	cli := client.NewClient(nil, nil)
 
 	if *noColor {
 		fmt.Println("Warning: no-color flag is set but not yet implemented")
 	}
 
-	// Chạy client ở chế độ tương tác
 	cli.Run()
 }

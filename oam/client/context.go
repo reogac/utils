@@ -87,14 +87,14 @@ func (c *Client) goContext(ctxInfo oam.ServerContext) {
 		})
 		commands = append(commands, ishell.Cmd{
 			Name: "connect",
-			Help: "Connect to http://ip:port",
+			Help: "Connect to a remote server",
 			Func: func(ctx *ishell.Context) {
-				if len(ctx.Args) < 1 {
-					ctx.Println("Usage: connect <http://ip:port>")
+				if srv := c.parseServer(ctx.Args); srv != nil {
+					c.connect(srv)
+				} else {
+					ctx.Println("Usage: connect <[http://]ip:port[/prefix]> header certName")
 					return
 				}
-				url := ctx.Args[0]
-				c.connect(url)
 			},
 		})
 		newCtx = &Context{
