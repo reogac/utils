@@ -1,6 +1,6 @@
 package oam
 
-// CommandInfo - Define the structure command same as server
+//Command definition
 type CommandInfo struct {
 	Name        string        `json:"name"`
 	Usage       string        `json:"usage"`
@@ -10,7 +10,7 @@ type CommandInfo struct {
 	Subcommands []CommandInfo `json:"subcommands,omitempty"`
 }
 
-// FlagInfo - Define the structure of flag same as server
+// Flag definition
 type FlagInfo struct {
 	Name        string `json:"name"`
 	Usage       string `json:"usage"`

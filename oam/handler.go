@@ -1,10 +1,13 @@
 package oam
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/reogac/utils/httpw"
 	"github.com/sirupsen/logrus"
+	"github.com/urfave/cli/v3"
 	"net/http"
 )
 
@@ -20,15 +23,14 @@ const (
 	OAM_CMD    string = "cmd"
 )
 
-//inteface for any context handler (AmfHandler/UeHandler)
-type ContextHandler interface {
-	HandleCmd(string, []string) (CmdResponse, error)
+type HasNextContext interface {
+	NextContext() *ServerContext
 }
 
 type OamApiBackend interface {
 	GetName() string
-	GetContext() ServerContext
-	GetHandler(string) ContextHandler //get handler for given context id
+	RootContext() ServerContext
+	GetContextHandler(string) (any, map[string]cli.Command)
 }
 
 type OamHandler struct {
@@ -82,7 +84,7 @@ func (h *OamHandler) handleConn(c *gin.Context) {
 		Nonce:      req.Nonce,
 		ServerName: h.backend.GetName(),
 		Message:    fmt.Sprintf("%s server connected, type help to see commands", h.backend.GetName()),
-		Context:    h.backend.GetContext(),
+		Context:    h.backend.RootContext(),
 	})
 
 }
@@ -98,23 +100,42 @@ func (h *OamHandler) handleCmd(c *gin.Context) {
 		return
 	}
 	//2. get context handler
-	ctxHandler := h.backend.GetHandler(req.ContextId)
+	ctxHandler, cmds := h.backend.GetContextHandler(req.ContextId)
 	if ctxHandler == nil {
 		c.JSON(http.StatusInternalServerError, CmdResponse{
 			Error: fmt.Sprintf("Unknown context %s", req.ContextId),
 		})
-
 		return
 	}
+	rsp := new(CmdResponse)
 	// 3. Execute the command with handler
-	rsp, err := ctxHandler.HandleCmd(req.Name, req.Args)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, CmdResponse{
-			Error: err.Error(),
-		})
-		return
+	if cmd, ok := cmds[req.Name]; !ok {
+		rsp.Error = fmt.Sprintf("Unkown command: %s", req.Name)
+		c.JSON(http.StatusInternalServerError, rsp)
+	} else {
+		// attach handler
+		ctx := context.WithValue(context.Background(), "handler", ctxHandler)
+
+		//set writer to catch help/usage/error output
+		var w bytes.Buffer
+		cmd.Writer = &w
+		cmd.ErrWriter = &w
+
+		args := append([]string{req.Name}, req.Args...)
+		if err := cmd.Run(ctx, args); err == nil {
+			if buf := w.Bytes(); len(buf) > 0 {
+				rsp.Message = string(buf)
+			}
+			//if the context handler set the next context, write it to the
+			//response message
+			if inf, ok := ctxHandler.(HasNextContext); ok {
+				//set the next context
+				rsp.Context = inf.NextContext()
+			}
+			c.JSON(http.StatusOK, rsp)
+		} else {
+			rsp.Error = err.Error()
+			c.JSON(http.StatusInternalServerError, rsp)
+		}
 	}
-
-	c.JSON(http.StatusOK, rsp)
-
 }

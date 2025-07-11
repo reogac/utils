@@ -41,6 +41,7 @@ func BuildCommands(commands map[string]cli.Command) (infos []CommandInfo) {
 
 			info.Flags = append(info.Flags, flagInfo)
 		}
+		//TODO: add subcommands
 
 		infos = append(infos, info)
 	}
