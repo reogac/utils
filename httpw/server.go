@@ -39,7 +39,7 @@ type Server struct {
 	wg     sync.WaitGroup
 }
 
-func New(opts Options) *Server {
+func NewServer(opts Options) *Server {
 
 	router := gin.New()
 

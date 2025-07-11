@@ -27,10 +27,67 @@ type HasNextContext interface {
 	NextContext() *ServerContext
 }
 
+type HandlerContext struct {
+	cmds    map[string]cli.Command
+	handler any
+	ext     *HandlerContext
+}
+
+func NewHandlerContext(h any, cmds map[string]cli.Command, extention *HandlerContext) *HandlerContext {
+	return &HandlerContext{
+		cmds:    cmds,
+		handler: h,
+		ext:     extention,
+	}
+}
+
+func (h *HandlerContext) Cmds() map[string]cli.Command {
+	return h.cmds
+}
+
+func (h *HandlerContext) handle(req *CmdRequest, c *gin.Context) {
+	rsp := new(CmdResponse)
+	if cmd, ok := h.cmds[req.Name]; !ok { //command not found, move to extention
+		if h.ext != nil {
+			h.ext.handle(req, c)
+		} else { //or error
+			rsp.Error = fmt.Sprintf("Unkown command: %s", req.Name)
+			c.JSON(http.StatusInternalServerError, rsp)
+		}
+	} else {
+		// attach handler
+		ctx := context.WithValue(context.Background(), "handler", h.handler)
+
+		//set writer to catch help/usage/error output
+		var w bytes.Buffer
+		cmd.Writer = &w
+		cmd.ErrWriter = &w
+
+		args := append([]string{req.Name}, req.Args...)
+		// execute command
+		if err := cmd.Run(ctx, args); err == nil {
+			if buf := w.Bytes(); len(buf) > 0 {
+				rsp.Message = string(buf)
+			}
+			//if the context handler set the next context, write it to the
+			//response message
+			if inf, ok := h.handler.(HasNextContext); ok {
+				//set the next context
+				rsp.Context = inf.NextContext()
+			}
+			c.JSON(http.StatusOK, rsp)
+		} else {
+			rsp.Error = err.Error()
+			c.JSON(http.StatusInternalServerError, rsp)
+		}
+	}
+
+}
+
 type OamApiBackend interface {
 	GetName() string
 	RootContext() ServerContext
-	GetContextHandler(string) (any, map[string]cli.Command)
+	GetContextHandler(string) *HandlerContext
 }
 
 type OamHandler struct {
@@ -100,42 +157,13 @@ func (h *OamHandler) handleCmd(c *gin.Context) {
 		return
 	}
 	//2. get context handler
-	ctxHandler, cmds := h.backend.GetContextHandler(req.ContextId)
-	if ctxHandler == nil {
+	hCtx := h.backend.GetContextHandler(req.ContextId)
+	if hCtx == nil {
 		c.JSON(http.StatusInternalServerError, CmdResponse{
 			Error: fmt.Sprintf("Unknown context %s", req.ContextId),
 		})
-		return
-	}
-	rsp := new(CmdResponse)
-	// 3. Execute the command with handler
-	if cmd, ok := cmds[req.Name]; !ok {
-		rsp.Error = fmt.Sprintf("Unkown command: %s", req.Name)
-		c.JSON(http.StatusInternalServerError, rsp)
 	} else {
-		// attach handler
-		ctx := context.WithValue(context.Background(), "handler", ctxHandler)
-
-		//set writer to catch help/usage/error output
-		var w bytes.Buffer
-		cmd.Writer = &w
-		cmd.ErrWriter = &w
-
-		args := append([]string{req.Name}, req.Args...)
-		if err := cmd.Run(ctx, args); err == nil {
-			if buf := w.Bytes(); len(buf) > 0 {
-				rsp.Message = string(buf)
-			}
-			//if the context handler set the next context, write it to the
-			//response message
-			if inf, ok := ctxHandler.(HasNextContext); ok {
-				//set the next context
-				rsp.Context = inf.NextContext()
-			}
-			c.JSON(http.StatusOK, rsp)
-		} else {
-			rsp.Error = err.Error()
-			c.JSON(http.StatusInternalServerError, rsp)
-		}
+		//3. handle command
+		hCtx.handle(&req, c)
 	}
 }

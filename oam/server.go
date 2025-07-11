@@ -10,7 +10,7 @@ type OamServer interface {
 
 func StartOamServer(addr string, backend OamApiBackend) (srv OamServer, err error) {
 	// create remote http server
-	httpSrv := httpw.New(httpw.Options{
+	httpSrv := httpw.NewServer(httpw.Options{
 		Addr:   addr,
 		Routes: NewOamHandler(backend).Routes(), //add routes for handling remote requests
 	})
