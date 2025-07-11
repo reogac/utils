@@ -28,12 +28,13 @@ type HasNextContext interface {
 }
 
 type HandlerContext struct {
+	id      string //context identity
 	cmds    map[string]cli.Command
 	handler any
 	ext     *HandlerContext
 }
 
-func NewHandlerContext(h any, cmds map[string]cli.Command, extention *HandlerContext) *HandlerContext {
+func NewHandlerContext(id string, h any, cmds map[string]cli.Command, extention *HandlerContext) *HandlerContext {
 	return &HandlerContext{
 		cmds:    cmds,
 		handler: h,
@@ -41,8 +42,12 @@ func NewHandlerContext(h any, cmds map[string]cli.Command, extention *HandlerCon
 	}
 }
 
-func (h *HandlerContext) Cmds() map[string]cli.Command {
-	return h.cmds
+func (h *HandlerContext) prompt() string {
+	return h.id + "> "
+}
+
+func (h *HandlerContext) buildCommands() (infos []CommandInfo) {
+	return BuildCommands(h.cmds)
 }
 
 func (h *HandlerContext) handle(req *CmdRequest, c *gin.Context) {
@@ -84,19 +89,17 @@ func (h *HandlerContext) handle(req *CmdRequest, c *gin.Context) {
 
 }
 
-type OamApiBackend interface {
-	GetName() string
-	RootContext() ServerContext
-	GetContextHandler(string) *HandlerContext
-}
-
 type OamHandler struct {
-	backend OamApiBackend
+	name      string
+	ctxGetter func(string) *HandlerContext
+	rootId    string
 }
 
-func NewOamHandler(backend OamApiBackend) *OamHandler {
+func NewOamHandler(name string, rootId string, getter func(string) *HandlerContext) *OamHandler {
 	return &OamHandler{
-		backend: backend,
+		name:      name,
+		rootId:    rootId,
+		ctxGetter: getter,
 	}
 }
 
@@ -108,7 +111,7 @@ func (h *OamHandler) Routes() []httpw.Route {
 			Handler: func(c *gin.Context) {
 				c.JSON(200, gin.H{
 					"message": "NF's OAM API ready",
-					"service": h.backend.GetName(),
+					"service": h.name,
 				})
 			},
 		},
@@ -135,15 +138,24 @@ func (h *OamHandler) handleConn(c *gin.Context) {
 		})
 		return
 	}
-
+	root := h.ctxGetter(h.rootId)
+	if root == nil {
+		c.JSON(http.StatusBadRequest, ConnectionResponse{
+			Error: "Fail to get root contextL: " + h.rootId,
+		})
+		return
+	}
 	// Prepare response
 	c.JSON(http.StatusOK, ConnectionResponse{
 		Nonce:      req.Nonce,
-		ServerName: h.backend.GetName(),
-		Message:    fmt.Sprintf("%s server connected, type help to see commands", h.backend.GetName()),
-		Context:    h.backend.RootContext(),
+		ServerName: h.name,
+		Message:    fmt.Sprintf("%s server connected, type help to see commands", h.name),
+		Context: ServerContext{
+			Id:       root.id,
+			Prompt:   root.prompt(),
+			Commands: root.buildCommands(),
+		},
 	})
-
 }
 
 // handle connection
@@ -157,7 +169,7 @@ func (h *OamHandler) handleCmd(c *gin.Context) {
 		return
 	}
 	//2. get context handler
-	hCtx := h.backend.GetContextHandler(req.ContextId)
+	hCtx := h.ctxGetter(req.ContextId)
 	if hCtx == nil {
 		c.JSON(http.StatusInternalServerError, CmdResponse{
 			Error: fmt.Sprintf("Unknown context %s", req.ContextId),
