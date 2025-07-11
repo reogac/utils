@@ -36,6 +36,7 @@ type HandlerContext struct {
 
 func NewHandlerContext(id string, h any, cmds map[string]cli.Command, extention *HandlerContext) *HandlerContext {
 	return &HandlerContext{
+		id:      id,
 		cmds:    cmds,
 		handler: h,
 		ext:     extention,
@@ -47,7 +48,11 @@ func (h *HandlerContext) prompt() string {
 }
 
 func (h *HandlerContext) buildCommands() (infos []CommandInfo) {
-	return BuildCommands(h.cmds)
+	cmds := buildCommands(h.cmds)
+	if h.ext != nil {
+		cmds = append(cmds, h.ext.buildCommands()...)
+	}
+	return cmds
 }
 
 func (h *HandlerContext) handle(req *CmdRequest, c *gin.Context) {
@@ -141,7 +146,7 @@ func (h *OamHandler) handleConn(c *gin.Context) {
 	root := h.ctxGetter(h.rootId)
 	if root == nil {
 		c.JSON(http.StatusBadRequest, ConnectionResponse{
-			Error: "Fail to get root contextL: " + h.rootId,
+			Error: "Fail to get root context: " + h.rootId,
 		})
 		return
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func BuildCommands(commands map[string]cli.Command) (infos []CommandInfo) {
+func buildCommands(commands map[string]cli.Command) (infos []CommandInfo) {
 	// convert cli command to CommandInfo
 	for _, cmd := range commands {
 		info := CommandInfo{
