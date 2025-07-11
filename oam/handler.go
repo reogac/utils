@@ -24,7 +24,7 @@ const (
 )
 
 type HasNextContext interface {
-	NextContext() *ServerContext
+	NextContext() *HandlerContext
 }
 
 type HandlerContext struct {
@@ -45,6 +45,13 @@ func NewHandlerContext(id string, h any, cmds map[string]cli.Command, extention 
 
 func (h *HandlerContext) prompt() string {
 	return h.id + "> "
+}
+func (h *HandlerContext) buildServerContext() *ServerContext {
+	return &ServerContext{
+		Id:       h.id,
+		Prompt:   h.prompt(),
+		Commands: h.buildCommands(),
+	}
 }
 
 func (h *HandlerContext) buildCommands() (infos []CommandInfo) {
@@ -82,8 +89,10 @@ func (h *HandlerContext) handle(req *CmdRequest, c *gin.Context) {
 			//if the context handler set the next context, write it to the
 			//response message
 			if inf, ok := h.handler.(HasNextContext); ok {
-				//set the next context
-				rsp.Context = inf.NextContext()
+				if nextCtx := inf.NextContext(); nextCtx != nil {
+					//set the next context
+					rsp.Context = nextCtx.buildServerContext()
+				}
 			}
 			c.JSON(http.StatusOK, rsp)
 		} else {
@@ -150,16 +159,13 @@ func (h *OamHandler) handleConn(c *gin.Context) {
 		})
 		return
 	}
+	srvCtx := root.buildServerContext()
 	// Prepare response
 	c.JSON(http.StatusOK, ConnectionResponse{
 		Nonce:      req.Nonce,
 		ServerName: h.name,
 		Message:    fmt.Sprintf("%s server connected, type help to see commands", h.name),
-		Context: ServerContext{
-			Id:       root.id,
-			Prompt:   root.prompt(),
-			Commands: root.buildCommands(),
-		},
+		Context:    *srvCtx,
 	})
 }
 
