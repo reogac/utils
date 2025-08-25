@@ -54,10 +54,6 @@ func (s *State) CurrentState() StateType {
 	return s.current
 }
 
-func (s *State) SetNextEvent(event *EventData) {
-	s.nextEv = event
-}
-
 type StateEventTuple struct {
 	state StateType
 	event EventType
