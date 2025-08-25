@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -62,14 +63,22 @@ type StateEventTuple struct {
 	event EventType
 }
 
-func Tuple(state StateType, event EventType) (tuple StateEventTuple) {
-	tuple.event = event
-	tuple.state = state
-	return
+func Tuple(state StateType, event EventType) StateEventTuple {
+	return StateEventTuple{
+		event: event,
+		state: state,
+	}
+}
+
+type CallbackContext struct {
+	State        *State
+	Event        *EventData
+	Ctx          context.Context
+	SetNextEvent func(*EventData)
 }
 
 type Transitions map[StateEventTuple]StateType
-type CallbackFn func(*State, *EventData)
+type CallbackFn func(*CallbackContext)
 type Callbacks map[StateType]CallbackFn
 
 type Fsm struct {
@@ -161,12 +170,27 @@ func (fsm *Fsm) processNextEvent(state *State) {
 		fsm.metrics.onTriggered()
 		nextEv := state.nextEv
 		state.nextEv = nil //reset next event for the state
+		ctx := fsm.createCallbackContext(state, nextEv)
 		if _, ok := fsm.events[nextEv.Type()]; ok {
-			fsm.handler(state, nextEv)
+			fsm.handler(ctx)
 		} else { //if it is a transitional event
-			fsm.transit(state, nextEv, nil)
+			fsm.transit(ctx, nil)
 		}
 		fsm.metrics.onCompleted(nextEv.Type(), t)
+	}
+}
+
+func (fsm *Fsm) createCallbackContext(state *State, event *EventData) *CallbackContext {
+	return &CallbackContext{
+		State:        state,
+		Event:        event,
+		SetNextEvent: fsm.setNextEvent(state, event.Type()),
+	}
+}
+
+func (fsm *Fsm) setNextEvent(state *State, evType EventType) func(*EventData) {
+	return func(ev *EventData) {
+		state.nextEv = ev
 	}
 }
 
@@ -177,13 +201,15 @@ func (fsm *Fsm) handleEvent(state *State, event *EventData, errCh chan error, sy
 
 	var fn func()
 	var nonTransit bool
+	ctx := fsm.createCallbackContext(state, event)
+
 	//if the event is in the list of non-transitional events
 	if _, nonTransit = fsm.events[event.Type()]; nonTransit {
 		fn = func() {
 			state.evLock.Lock()
 			t := time.Now()
 			fsm.metrics.onTriggered()
-			fsm.handler(state, event)
+			fsm.handler(ctx)
 			fsm.metrics.onCompleted(event.Type(), t)
 			fsm.processNextEvent(state)
 			state.evLock.Unlock()
@@ -193,7 +219,7 @@ func (fsm *Fsm) handleEvent(state *State, event *EventData, errCh chan error, sy
 			state.evLock.Lock()
 			t := time.Now()
 			fsm.metrics.onTriggered()
-			fsm.transit(state, event, errCh)
+			fsm.transit(ctx, errCh)
 			fsm.metrics.onCompleted(event.Type(), t)
 			fsm.processNextEvent(state)
 			state.evLock.Unlock() //unlock the state
@@ -212,7 +238,9 @@ func (fsm *Fsm) handleEvent(state *State, event *EventData, errCh chan error, sy
 	}
 }
 
-func (fsm *Fsm) transit(state *State, event *EventData, errCh chan error) {
+func (fsm *Fsm) transit(ctx *CallbackContext, errCh chan error) {
+	state := ctx.State
+	event := ctx.Event
 	current := state.CurrentState()
 	tuple := StateEventTuple{
 		state: current,
@@ -227,16 +255,16 @@ func (fsm *Fsm) transit(state *State, event *EventData, errCh chan error) {
 		curCallback := fsm.callbacks[current]
 		nextCallback := fsm.callbacks[nextState]
 		if curCallback != nil {
-			curCallback(state, event)
+			curCallback(ctx)
 		}
 		if current != nextState { //state will be changed
 			//exectute callback for ExitEvent of the current state
-			curCallback(state, event.clone(ExitEvent))
+			curCallback(fsm.createCallbackContext(state, event.clone(ExitEvent)))
 			//change to the next state
 			state.setState(nextState)
 			//execute callback for EtryEvent of the next state
 			if nextCallback != nil {
-				nextCallback(state, event.clone(EntryEvent))
+				nextCallback(fsm.createCallbackContext(state, event.clone(EntryEvent)))
 			}
 		}
 	} else {

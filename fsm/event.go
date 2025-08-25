@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"context"
 	"time"
 	"unsafe"
 )
@@ -9,20 +10,23 @@ type EventData struct {
 	evType      EventType
 	evDat       unsafe.Pointer
 	createdTime time.Time
+	ctx         context.Context
 }
 
-func NewEmptyEventData(evType EventType) *EventData {
+func NewEmptyEventData(ctx context.Context, evType EventType) *EventData {
 	return &EventData{
 		evType:      evType,
 		evDat:       nil,
 		createdTime: time.Now(),
+		ctx:         ctx,
 	}
 }
 
-func NewEventData[T any](evType EventType, value *T) *EventData {
+func NewEventData[T any](ctx context.Context, evType EventType, value *T) *EventData {
 	ev := &EventData{
 		evType:      evType,
 		createdTime: time.Now(),
+		ctx:         ctx,
 	}
 	if value != nil {
 		ev.evDat = unsafe.Pointer(value)
@@ -51,5 +55,6 @@ func (e *EventData) clone(evType EventType) *EventData {
 		evType:      evType,
 		evDat:       e.evDat,
 		createdTime: time.Now(),
+		ctx:         e.ctx,
 	}
 }
