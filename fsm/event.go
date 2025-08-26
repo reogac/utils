@@ -6,6 +6,14 @@ import (
 	"unsafe"
 )
 
+type EventType int
+
+const (
+	EntryEvent EventType = iota
+	ExitEvent
+	EventIndexStart
+)
+
 type EventData struct {
 	evType      EventType
 	evDat       unsafe.Pointer
