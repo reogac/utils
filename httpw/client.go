@@ -1,8 +1,8 @@
 package httpw
 
 import (
-	"crypto/tls"
-	"crypto/x509"
+	//	"crypto/tls"
+	//	"crypto/x509"
 	"fmt"
 	"github.com/reogac/utils"
 	"io"
@@ -16,34 +16,38 @@ type Client struct {
 	scheme string
 }
 
-func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) *Client {
-	if caPool != nil && cert != nil {
+/*
+	Transport: &http.Transport{
+						TLSClientConfig: &tls.Config{
+							Certificates:       []tls.Certificate{*cert},
+							RootCAs:            caPool,
+							MinVersion:         tls.VersionTLS12,
+							InsecureSkipVerify: false, // DO NOT disable in production
+							ServerName:         serverName,
+						},
+					},
+*/
+func NewClient( /*cert *tls.Certificate, caPool *x509.CertPool, serverName string*/ t *http.Transport) *Client {
+	if t.TLSClientConfig != nil {
 		return &Client{
 			scheme: "https",
 			cli: http.Client{
-				Timeout: 5 * time.Second,
-				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{
-						Certificates:       []tls.Certificate{*cert},
-						RootCAs:            caPool,
-						MinVersion:         tls.VersionTLS12,
-						InsecureSkipVerify: false, // DO NOT disable in production
-						ServerName:         serverName,
-					},
-				},
+				Timeout:   5 * time.Second,
+				Transport: t,
 			},
 		}
 	} else {
 		return &Client{
 			cli: http.Client{
-				Timeout: 5 * time.Second,
+				Timeout:   5 * time.Second,
+				Transport: t,
 			},
 			scheme: "http",
 		}
 	}
 }
 
-//send request but do not read response body
+// send request but do not read response body
 func (w *Client) SendRequest(req *http.Request) (rsp *http.Response, err error) {
 	//set the right scheme
 	req.URL.Scheme = w.scheme
@@ -55,7 +59,7 @@ func (w *Client) SendRequest(req *http.Request) (rsp *http.Response, err error) 
 	return
 }
 
-//read request then read all response body
+// read request then read all response body
 func (w *Client) Send(method string, url string, body io.Reader) (rsp *http.Response, rspBody []byte, err error) {
 	var req *http.Request
 	url = fmt.Sprintf("%s://%s", w.scheme, url)
