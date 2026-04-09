@@ -1,14 +1,15 @@
 package httpw
 
 import (
-	//	"crypto/tls"
-	//	"crypto/x509"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
-	"github.com/reogac/utils"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"time"
+
+	"github.com/reogac/utils"
 )
 
 type Client struct {
@@ -16,19 +17,24 @@ type Client struct {
 	scheme string
 }
 
-/*
-	Transport: &http.Transport{
-						TLSClientConfig: &tls.Config{
-							Certificates:       []tls.Certificate{*cert},
-							RootCAs:            caPool,
-							MinVersion:         tls.VersionTLS12,
-							InsecureSkipVerify: false, // DO NOT disable in production
-							ServerName:         serverName,
-						},
-					},
-*/
-func NewClient( /*cert *tls.Certificate, caPool *x509.CertPool, serverName string*/ t *http.Transport) *Client {
-	if t.TLSClientConfig != nil {
+func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) *Client {
+	t := &http.Transport{
+		MaxConnsPerHost:     200,
+		MaxIdleConnsPerHost: 100,
+		MaxIdleConns:        500,
+		IdleConnTimeout:     60 * time.Second,
+		ForceAttemptHTTP2:   true,
+		DisableKeepAlives:   false,
+	}
+
+	if cert != nil && caPool != nil {
+		t.TLSClientConfig = &tls.Config{
+			Certificates:       []tls.Certificate{*cert},
+			RootCAs:            caPool,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: false, // DO NOT disable in production
+			ServerName:         serverName,
+		}
 		return &Client{
 			scheme: "https",
 			cli: http.Client{
