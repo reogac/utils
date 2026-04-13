@@ -57,10 +57,9 @@ func NewServer(opts Options) *Server {
 		MaxAge:           86400,
 	}))
 	var srv *http.Server
-	var tlsConfig *tls.Config
 	if opts.CaPool != nil {
 		// Configure TLS with optional client certificate validation
-		tlsConfig = &tls.Config{
+		tlsConfig := &tls.Config{
 			Certificates: []tls.Certificate{opts.Cert},
 			ClientCAs:    opts.CaPool,
 			ClientAuth:   tls.RequireAndVerifyClientCert, // Use tls.NoClientCert if no mTLS needed
@@ -68,15 +67,17 @@ func NewServer(opts Options) *Server {
 		}
 		tlsConfig.BuildNameToCertificate()
 		srv = &http.Server{
-			Addr:    opts.Addr,
-			Handler: h2c.NewHandler(router, &http2.Server{}),
-		}
-	} else {
-		srv = &http.Server{
 			Addr:      opts.Addr,
 			TLSConfig: tlsConfig,
 			Handler:   router,
 		}
+
+	} else {
+		srv = &http.Server{
+			Addr:    opts.Addr,
+			Handler: h2c.NewHandler(router, &http2.Server{}),
+		}
+
 	}
 
 	s := &Server{
