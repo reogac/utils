@@ -19,10 +19,10 @@ type Client struct {
 
 func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) *Client {
 	t := &http.Transport{
-		MaxConnsPerHost:     200,
-		MaxIdleConnsPerHost: 100,
-		MaxIdleConns:        500,
-		IdleConnTimeout:     60 * time.Second,
+		MaxConnsPerHost:     64,
+		MaxIdleConnsPerHost: 64,
+		MaxIdleConns:        512,
+		IdleConnTimeout:     90 * time.Second,
 		ForceAttemptHTTP2:   true,
 		DisableKeepAlives:   false,
 	}

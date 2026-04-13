@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 )
 
 func init() {
@@ -54,6 +56,7 @@ func NewServer(opts Options) *Server {
 		AllowAllOrigins:  true,
 		MaxAge:           86400,
 	}))
+	var srv *http.Server
 	var tlsConfig *tls.Config
 	if opts.CaPool != nil {
 		// Configure TLS with optional client certificate validation
@@ -64,15 +67,21 @@ func NewServer(opts Options) *Server {
 			MinVersion:   tls.VersionTLS12,
 		}
 		tlsConfig.BuildNameToCertificate()
+		srv = &http.Server{
+			Addr:    opts.Addr,
+			Handler: h2c.NewHandler(router, &http2.Server{}),
+		}
+	} else {
+		&http.Server{
+			Addr:      opts.Addr,
+			TLSConfig: tlsConfig,
+			Handler:   router,
+		}
 	}
 
 	s := &Server{
 		router: router,
-		Srv: &http.Server{
-			Addr:      opts.Addr,
-			TLSConfig: tlsConfig,
-			Handler:   router,
-		},
+		Srv:    srv,
 	}
 
 	s.AddRoutes("", opts.Routes)
