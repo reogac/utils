@@ -1,15 +1,18 @@
 package httpw
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/reogac/utils"
+	"golang.org/x/net/http2"
 )
 
 type Client struct {
@@ -18,16 +21,17 @@ type Client struct {
 }
 
 func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) *Client {
-	t := &http.Transport{
-		MaxConnsPerHost:     64,
-		MaxIdleConnsPerHost: 64,
-		MaxIdleConns:        512,
-		IdleConnTimeout:     90 * time.Second,
-		ForceAttemptHTTP2:   true,
-		DisableKeepAlives:   false,
-	}
 
 	if cert != nil && caPool != nil {
+		t := &http.Transport{
+			MaxConnsPerHost:     64,
+			MaxIdleConnsPerHost: 64,
+			MaxIdleConns:        512,
+			IdleConnTimeout:     90 * time.Second,
+			ForceAttemptHTTP2:   true,
+			DisableKeepAlives:   false,
+		}
+
 		t.TLSClientConfig = &tls.Config{
 			Certificates:       []tls.Certificate{*cert},
 			RootCAs:            caPool,
@@ -43,6 +47,13 @@ func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) 
 			},
 		}
 	} else {
+		t := &http2.Transport{
+			AllowHTTP: true, // allow h2c
+			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, network, addr)
+			},
+		}
 		return &Client{
 			cli: http.Client{
 				Timeout:   5 * time.Second,
