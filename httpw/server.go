@@ -72,7 +72,7 @@ func NewServer(opts Options) *Server {
 			Handler: h2c.NewHandler(router, &http2.Server{}),
 		}
 	} else {
-		&http.Server{
+		srv = &http.Server{
 			Addr:      opts.Addr,
 			TLSConfig: tlsConfig,
 			Handler:   router,
