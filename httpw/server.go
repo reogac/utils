@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gin-contrib/cors"
+	//	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -29,10 +29,11 @@ type RouteGroup struct {
 }
 
 type Options struct {
-	Addr   string
-	Cert   tls.Certificate
-	CaPool *x509.CertPool
-	Routes []Route
+	Addr        string
+	Cert        tls.Certificate
+	CaPool      *x509.CertPool
+	Routes      []Route
+	Middlewares []gin.HandlerFunc
 }
 
 type Server struct {
@@ -44,18 +45,23 @@ type Server struct {
 func NewServer(opts Options) *Server {
 
 	router := gin.New()
+	/*
+		router.Use(cors.New(cors.Config{
+			AllowMethods: []string{"GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"},
+			AllowHeaders: []string{
+				"Origin", "Content-Length", "Content-Type", "User-Agent", "Referrer", "Host",
+				"Token", "X-Requested-With",
+			},
+			ExposeHeaders:    []string{"Content-Length"},
+			AllowCredentials: true,
+			AllowAllOrigins:  true,
+			MaxAge:           86400,
+		}))
+	*/
+	for _, m := range opts.Middlewares {
+		router.Use(m)
+	}
 
-	router.Use(cors.New(cors.Config{
-		AllowMethods: []string{"GET", "POST", "OPTIONS", "PUT", "PATCH", "DELETE"},
-		AllowHeaders: []string{
-			"Origin", "Content-Length", "Content-Type", "User-Agent", "Referrer", "Host",
-			"Token", "X-Requested-With",
-		},
-		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
-		AllowAllOrigins:  true,
-		MaxAge:           86400,
-	}))
 	var srv *http.Server
 	if opts.CaPool != nil {
 		// Configure TLS with optional client certificate validation
