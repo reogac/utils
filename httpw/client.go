@@ -42,7 +42,7 @@ func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) 
 		return &Client{
 			scheme: "https",
 			cli: http.Client{
-				Timeout:   5 * time.Second,
+				Timeout:   10 * time.Second,
 				Transport: t,
 			},
 		}
@@ -56,7 +56,7 @@ func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) 
 		}
 		return &Client{
 			cli: http.Client{
-				Timeout:   5 * time.Second,
+				Timeout:   10 * time.Second,
 				Transport: t,
 			},
 			scheme: "http",
