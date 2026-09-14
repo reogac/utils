@@ -24,6 +24,17 @@ func init() {
 	gin.SetMode(gin.ReleaseMode)
 }
 
+// http2Server is the HTTP/2 configuration both server paths run: a connection
+// that has read nothing for PingAfterIdle is pinged, and closed if the ping goes
+// unanswered for PingTimeout, so a consumer lost to a partition releases the
+// requests it left behind within seconds rather than when TCP notices.
+func http2Server() *http2.Server {
+	return &http2.Server{
+		ReadIdleTimeout: PingAfterIdle,
+		PingTimeout:     PingTimeout,
+	}
+}
+
 type Route struct {
 	Method  string
 	Pattern string
@@ -89,11 +100,15 @@ func NewServer(opts Options) *Server {
 			TLSConfig: tlsConfig,
 			Handler:   router,
 		}
+		//HTTP/2 over TLS with the health check. It errs only on a TLS
+		//configuration naming cipher suites HTTP/2 forbids, which this one
+		//does not name
+		http2.ConfigureServer(srv, http2Server())
 
 	} else {
 		srv = &http.Server{
 			Addr:    opts.Addr,
-			Handler: h2c.NewHandler(router, &http2.Server{}),
+			Handler: h2c.NewHandler(router, http2Server()),
 		}
 
 	}
