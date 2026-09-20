@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/reogac/utils"
 	"golang.org/x/net/http2"
 )
 
@@ -98,7 +97,7 @@ func (w *Client) SendRequest(req *http.Request) (rsp *http.Response, err error) 
 	//send request
 	if rsp, err = w.cli.Do(req); err != nil {
 		release()
-		err = utils.WrapError("Send http request", err)
+		err = fmt.Errorf("Send http request: %w", err)
 		return
 	}
 	rsp.Body = releaseOnClose{ReadCloser: rsp.Body, release: release}
@@ -110,13 +109,13 @@ func (w *Client) Send(method string, url string, body io.Reader) (rsp *http.Resp
 	var req *http.Request
 	url = fmt.Sprintf("%s://%s", w.scheme, url)
 	if req, err = http.NewRequest(method, url, body); err != nil {
-		return nil, nil, utils.WrapError("Create http request", err)
+		return nil, nil, fmt.Errorf("Create http request: %w", err)
 	}
 	req, release := w.bound(req)
 	defer release()
 	//send request
 	if rsp, err = w.cli.Do(req); err != nil {
-		err = utils.WrapError("Send http request", err)
+		err = fmt.Errorf("Send http request: %w", err)
 		return
 	}
 
@@ -124,7 +123,7 @@ func (w *Client) Send(method string, url string, body io.Reader) (rsp *http.Resp
 	if rsp.Body != nil {
 		defer rsp.Body.Close()
 		if rspBody, err = ioutil.ReadAll(rsp.Body); err != nil {
-			err = utils.WrapError("Read http response body", err)
+			err = fmt.Errorf("Read http response body: %w", err)
 		}
 	}
 	return

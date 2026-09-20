@@ -2,8 +2,11 @@ package httpw
 
 import (
 	"context"
+	"errors"
 	"io"
+	"net"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,5 +114,37 @@ func TestBothEndsPingAnIdleConnection(t *testing.T) {
 	}
 	if s := http2Server(); s.ReadIdleTimeout != PingAfterIdle || s.PingTimeout != PingTimeout {
 		t.Errorf("server pings after %s, times out after %s", s.ReadIdleTimeout, s.PingTimeout)
+	}
+}
+
+// A transport failure must arrive with its cause still reachable. The message
+// is wrapped with %w rather than by a wrapper of this package's own: a consumer
+// tells "the request may have been processed, only the answer is missing" from
+// "it was never delivered" by asking errors.As for a net.Error and errors.Is
+// for the context's own error, and a wrapper without Unwrap answers false to
+// both - so every timeout reads as undelivered and invites a retry of work that
+// may already have been done.
+func TestAFailureKeepsItsCauseReachable(t *testing.T) {
+	addr := slowServer(t, time.Minute)
+	c := NewClient(nil, nil, "")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/slow", nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	if _, err = c.SendRequest(req); err == nil {
+		t.Fatal("a request whose deadline passed returned no error")
+	}
+	if !strings.Contains(err.Error(), "Send http request") {
+		t.Errorf("the error lost its message: %v", err)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Errorf("errors.Is(err, context.DeadlineExceeded) is false: %v", err)
+	}
+	var ne net.Error
+	if !errors.As(err, &ne) || !ne.Timeout() {
+		t.Errorf("errors.As(err, &net.Error) does not report a timeout: %v", err)
 	}
 }
