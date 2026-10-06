@@ -9,6 +9,7 @@ import (
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 	"net/http"
+	"sync"
 )
 
 var log *logrus.Entry
@@ -22,6 +23,15 @@ const (
 	OAM_CONN   string = "connect"
 	OAM_CMD    string = "cmd"
 )
+
+// runMu runs one command at a time in the process. urfave/cli's Command.Run
+// writes package-level state on every call - its HelpFlag and VersionFlag,
+// which it attaches to the command and resets, and its slice-flag separator
+// setting - and parses into the command's flag objects, which every copy of a
+// command taken from a context's table shares. Two requests at once raced on
+// all of it, and one could run on the other's flag values. OAM commands are
+// short and rare, so running them one at a time costs nothing that matters.
+var runMu sync.Mutex
 
 type HasNextContext interface {
 	NextContext() *HandlerContext
@@ -81,8 +91,11 @@ func (h *HandlerContext) handle(req *CmdRequest, c *gin.Context) {
 		cmd.ErrWriter = &w
 
 		args := append([]string{req.Name}, req.Args...)
-		// execute command
-		if err := cmd.Run(ctx, args); err == nil {
+		// execute command, alone (runMu)
+		runMu.Lock()
+		err := cmd.Run(ctx, args)
+		runMu.Unlock()
+		if err == nil {
 			if buf := w.Bytes(); len(buf) > 0 {
 				rsp.Message = string(buf)
 			}
