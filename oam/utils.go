@@ -1,7 +1,6 @@
 package oam
 
 import (
-	"fmt"
 	"github.com/urfave/cli/v3"
 	"strings"
 )
@@ -16,30 +15,8 @@ func buildCommands(commands map[string]cli.Command) (infos []CommandInfo) {
 			ArgsUsage:   cmd.ArgsUsage,
 		}
 
-		// Process flags
 		for _, flag := range cmd.Flags {
-			flagInfo := FlagInfo{
-				Name:  strings.Join(flag.Names(), ", "),
-				Usage: flagUsage(flag),
-			}
-
-			// Set default value text based on flag type
-			switch f := flag.(type) {
-			case *cli.StringFlag:
-				flagInfo.DefaultText = f.Value
-			case *cli.BoolFlag:
-				if f.Value {
-					flagInfo.DefaultText = "true"
-				} else {
-					flagInfo.DefaultText = "false"
-				}
-			case *cli.IntFlag:
-				if f.Value != 0 {
-					flagInfo.DefaultText = fmt.Sprintf("%d", f.Value)
-				}
-			}
-
-			info.Flags = append(info.Flags, flagInfo)
+			info.Flags = append(info.Flags, flagInfo(flag))
 		}
 		//TODO: add subcommands
 
@@ -49,15 +26,21 @@ func buildCommands(commands map[string]cli.Command) (infos []CommandInfo) {
 	return
 }
 
-func flagUsage(flag cli.Flag) string {
-	switch f := flag.(type) {
-	case *cli.StringFlag:
-		return f.Usage
-	case *cli.BoolFlag:
-		return f.Usage
-	case *cli.IntFlag:
-		return f.Usage
-	default:
-		return ""
+// flagInfo describes a flag of any type through the interfaces urfave/cli's
+// own help reads, so a duration or slice flag is described like a string one.
+// A flag's required mark is advertised, not enforced here: cli decides that
+// with IsSet, which stays true on a reused flag after its first request, so a
+// server checks a required flag's value itself.
+func flagInfo(flag cli.Flag) FlagInfo {
+	info := FlagInfo{Name: strings.Join(flag.Names(), ", ")}
+	if f, ok := flag.(cli.DocGenerationFlag); ok {
+		info.Usage = f.GetUsage()
+		if f.TakesValue() {
+			info.DefaultText = f.GetDefaultText()
+		}
 	}
+	if f, ok := flag.(cli.RequiredFlag); ok {
+		info.Required = f.IsRequired()
+	}
+	return info
 }
