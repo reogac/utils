@@ -148,7 +148,9 @@ func writeDetailHelp(cmd oam.CommandInfo) string {
 			sb.WriteString(flag.Name)
 			sb.WriteString(":  ")
 			sb.WriteString(flag.Usage)
-			if flag.DefaultText != "" {
+			if flag.Required {
+				sb.WriteString(" (required)")
+			} else if flag.DefaultText != "" {
 				sb.WriteString(" (default: ")
 				sb.WriteString(flag.DefaultText)
 				sb.WriteString(")")
