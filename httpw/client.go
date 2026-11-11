@@ -48,6 +48,7 @@ func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) 
 			IdleConnTimeout:     90 * time.Second,
 			ForceAttemptHTTP2:   true,
 			DisableKeepAlives:   false,
+			DialContext:         redialRefused((&net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second}).DialContext),
 		}
 
 		t.TLSClientConfig = &tls.Config{
@@ -70,11 +71,12 @@ func NewClient(cert *tls.Certificate, caPool *x509.CertPool, serverName string) 
 			timeout: DefaultTimeout,
 		}
 	} else {
+		var d net.Dialer
+		dial := redialRefused(d.DialContext)
 		t := &http2.Transport{
 			AllowHTTP: true, // allow h2c
 			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, network, addr)
+				return dial(ctx, network, addr)
 			},
 			ReadIdleTimeout: PingAfterIdle,
 			PingTimeout:     PingTimeout,
